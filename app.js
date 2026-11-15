@@ -23,52 +23,32 @@ const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const $ = (s,e=document) => e.querySelector(s);
 
 /* ---------- Datum / ISO-Woche (Mo = 1. Tag) ---------- */
-const addDays = (d,n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
-const startOfWeek = d => { const x = new Date(d.getFullYear(),d.getMonth(),d.getDate()); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; };
-function isoWeek(mon){ const thu = addDays(mon,3); const jan4 = new Date(thu.getFullYear(),0,4);
-  return { year: thu.getFullYear(), week: 1 + Math.round((startOfWeek(thu)-startOfWeek(jan4))/6048e5) }; }
-const wkKey = i => `${i.year}-W${String(i.week).padStart(2,'0')}`;
+const { addDays, startOfWeek, isoWeek, wkKey } = HTCore;
 function fmtRange(a,b){
   const same = a.getMonth()===b.getMonth(), sameY = a.getFullYear()===b.getFullYear();
   const l = `${a.getDate()}.${same?'':' '+MONTHS[a.getMonth()]}${sameY?'':' '+a.getFullYear()}`;
   return `${l} – ${b.getDate()}. ${MONTHS[b.getMonth()]} ${b.getFullYear()}`;
 }
 
-/* ---------- IndexedDB ---------- */
+/* ---------- Speicher-Anbindung (siehe storage.js) ---------- */
+let bt; const scheduleBackup = () => { clearTimeout(bt); bt = setTimeout(()=>HTStore.snapshot('change').catch(()=>{}),1500); };
 const idb = {
-  db: null,
-  open(){ return new Promise((res,rej)=>{ const r = indexedDB.open('habit-tracker',1);
-    r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('habits',{keyPath:'id'}); d.createObjectStore('weeks',{keyPath:'key'}); };
-    r.onsuccess = () => { this.db = r.result; res(); }; r.onerror = () => rej(r.error); }); },
-  tx(stores,mode,fn){ return new Promise((res,rej)=>{ const t = this.db.transaction(stores,mode); const out = fn(t);
-    t.oncomplete = () => res(out && out.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); },
-  getAll(st){ return this.tx(st,'readonly',t=>t.objectStore(st).getAll()); },
-  put(st,v){ return this.tx(st,'readwrite',t=>t.objectStore(st).put(v)); },
-  replaceAll(habits,weeks){ return this.tx(['habits','weeks'],'readwrite',t=>{
-    const h = t.objectStore('habits'), w = t.objectStore('weeks'); h.clear(); w.clear();
-    habits.forEach(x=>h.put(x)); weeks.forEach(x=>w.put(x)); }); }
+  put(st,v){ return (st==='weeks' ? HTStore.putWeek(v) : HTStore.putHabit(v)).then(r=>{ scheduleBackup(); return r; }); },
+  replaceAll(h,w){ return HTStore.replaceAll(h,w).then(()=>HTStore.snapshot('import').catch(()=>{})); }
 };
-
+const markExport = () => { try { localStorage.setItem('ht-last-export',String(Date.now())); } catch(e){} };
 /* ---------- State ---------- */
-const S = { habits: [], weeks: {}, mon: startOfWeek(new Date()), view: 'home', day: new Date().toDateString() };
+const S = { ready: false, habits: [], weeks: {}, mon: startOfWeek(new Date()), view: 'home', day: new Date().toDateString() };
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2));
 const activeHabits = () => S.habits.filter(h=>!h.archivedAt).sort((a,b)=>a.order-b.order);
-function visibleHabits(mon){
-  const end = addDays(mon,7).getTime()-1;
-  return S.habits.filter(h => new Date(h.createdAt).getTime() <= end && (!h.archivedAt || new Date(h.archivedAt).getTime() > end))
-    .sort((a,b)=>a.order-b.order);
-}
+const visibleHabits = mon => HTCore.visibleHabits(S.habits,mon);
 function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(()=>t.classList.remove('show'),2600); }
 
 async function toggle(h,i){
-  const iso = isoWeek(S.mon), k = wkKey(iso);
-  const w = S.weeks[k] || (S.weeks[k] = { key:k, year:iso.year, week:iso.week, habitIds:[], marks:{} });
-  if(!w.habitIds.includes(h.id)) w.habitIds.push(h.id);
-  const m = w.marks[h.id] || (w.marks[h.id] = Array(7).fill('neutral'));
-  const prev = m[i];
-  m[i] = { neutral:'completed', completed:'missed', missed:'neutral' }[prev];
-  try { await idb.put('weeks',w); } catch(e){ m[i] = prev; toast('Speichern fehlgeschlagen. Bitte erneut versuchen.'); }
-  return m[i];
+  const r = HTCore.toggle(S.weeks,S.mon,h.id,i);
+  try { await idb.put('weeks',r.week); }
+  catch(e){ r.week.marks[h.id][i] = r.prev; toast('Speichern fehlgeschlagen – bitte erneut tippen.'); }
+  return r.week.marks[h.id][i];
 }
 
 /* ---------- Home ---------- */
@@ -122,9 +102,11 @@ function settings(){
     <p class="hint" style="margin:0 0 8px">Deine Daten liegen nur auf diesem Gerät. Sichere sie regelmäßig.</p>
     <div class="btns"><button class="btn ghost" data-export>Exportieren</button><button class="btn ghost" data-import>Importieren</button></div>
     <input type="file" id="file" accept="application/json,.json" hidden></section>
+  <section class="card"><h2>Sicherheit & Backups</h2><div id="sec" class="hint">Lade …</div></section>
   <section class="card"><h2><img class="mini" src="assets/bow-small.png" alt=""> App-Informationen</h2>
     <p class="hint" style="margin:0">Habit Tracker 1.0 · Funktioniert offline · Keine Cloud, kein Konto.<br>${S.habits.length} Habits, ${Object.keys(S.weeks).length} gespeicherte Wochen.</p></section>`;
   const l = $('#hl'); if(l) dragSort(l);
+  fillSecurity();
 }
 async function saveOrder(ids){
   try { for(let i=0;i<ids.length;i++){ const h = S.habits.find(x=>x.id===ids[i]); if(h && h.order!==i){ h.order = i; await idb.put('habits',h); } } }
@@ -142,13 +124,15 @@ function dragSort(list){
   list.addEventListener('pointerup',end); list.addEventListener('pointercancel',end);
 }
 function settingsClick(e){
-  const c = e.target.closest('[data-add],[data-edit],[data-del],[data-export],[data-import]'); if(!c) return;
+  const c = e.target.closest('[data-add],[data-edit],[data-del],[data-export],[data-import],[data-snap],[data-restore]'); if(!c) return;
   if('add' in c.dataset) openEditor();
   else if(c.dataset.edit) openEditor(S.habits.find(h=>h.id===c.dataset.edit));
   else if(c.dataset.del){ const h = S.habits.find(x=>x.id===c.dataset.del);
     if(h && confirm(`„${h.name}“ wirklich löschen?\nVergangene Wochen bleiben erhalten.`)){
       h.archivedAt = new Date().toISOString(); idb.put('habits',h).then(render).catch(()=>toast('Löschen fehlgeschlagen.')); } }
   else if('export' in c.dataset) exportData();
+  else if('snap' in c.dataset) HTStore.snapshot('manual').then(ok=>{ toast(ok?'Backup erstellt.':'Kein Backup (keine gültigen Daten).'); fillSecurity(); }).catch(()=>toast('Backup fehlgeschlagen.'));
+  else if(c.dataset.restore){ if(confirm('Dieses Backup wiederherstellen? Der aktuelle Stand wird vorher automatisch als Backup gesichert.')) restoreFrom(c.dataset.restore); }
   else $('#file').click();
 }
 function openEditor(h){
@@ -180,38 +164,83 @@ function openEditor(h){
 
 /* ---------- Export / Import ---------- */
 async function exportData(){
-  const data = { app:'habit-tracker', version:1, exportedAt:new Date().toISOString(), habits:S.habits, weeks:Object.values(S.weeks) };
+  const data = { app:'habit-tracker', version:1, dbVersion:HTStore.DB_VERSION, exportedAt:new Date().toISOString(), habits:S.habits, weeks:Object.values(S.weeks) };
   const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const name = `habit-tracker-${new Date().toISOString().slice(0,10)}.json`, f = new File([blob],name,{type:'application/json'});
   if(navigator.canShare && navigator.canShare({files:[f]})){
-    try { await navigator.share({files:[f],title:name}); return; } catch(e){ if(e.name==='AbortError') return; } }
+    try { await navigator.share({files:[f],title:name}); markExport(); return; } catch(e){ if(e.name==='AbortError') return; } }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000); markExport();
 }
 async function importData(file){
   try {
     const d = JSON.parse(await file.text());
     if(d.app!=='habit-tracker' || !Array.isArray(d.habits) || !Array.isArray(d.weeks)) throw new Error('format');
+    if(!HTCore.validate(d).ok) throw new Error('invalid');
     if(!confirm(`Import ersetzt alle aktuellen Daten durch ${d.habits.length} Habits und ${d.weeks.length} Wochen. Fortfahren?`)) return;
-    await idb.replaceAll(d.habits,d.weeks);
+    await HTStore.replaceAll(d.habits,d.weeks);
     S.habits = d.habits; S.weeks = Object.fromEntries(d.weeks.map(w=>[w.key,w]));
     toast('Import erfolgreich.'); render();
   } catch(e){ toast('Diese Datei ist kein gültiges Habit-Tracker-Backup.'); }
 }
 
 /* ---------- Navigation / Start ---------- */
-function render(){ document.querySelectorAll('.overlay').forEach(o=>o.remove()); (S.view==='home'?home:settings)(); }
+function render(){ if(!S.ready) return; document.querySelectorAll('.overlay').forEach(o=>o.remove()); (S.view==='home'?home:settings)(); }
 function setView(v){ S.view = v; document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.view===v)); render(); window.scrollTo(0,0); }
 document.addEventListener('DOMContentLoaded',async()=>{
   $('#nav').addEventListener('click',e=>{ const b = e.target.closest('button'); if(b) setView(b.dataset.view); });
-  $('#view').addEventListener('click',e=>S.view==='home'?homeClick(e):settingsClick(e));
+  $('#view').addEventListener('click',e=>!S.ready?recoveryClick(e):S.view==='home'?homeClick(e):settingsClick(e));
   $('#view').addEventListener('change',e=>{ if(e.target.id==='file' && e.target.files[0]){ importData(e.target.files[0]); e.target.value=''; } });
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden && S.day!==new Date().toDateString()){ S.day = new Date().toDateString(); S.mon = startOfWeek(new Date()); render(); } });
-  try {
-    await idb.open();
-    S.habits = await idb.getAll('habits'); S.weeks = Object.fromEntries((await idb.getAll('weeks')).map(w=>[w.key,w]));
-    if(navigator.storage && navigator.storage.persist) navigator.storage.persist();
-  } catch(e){ toast('Lokaler Speicher nicht verfügbar.'); }
-  render();
+  document.addEventListener('visibilitychange',()=>{
+    if(!S.ready) return;
+    if(document.hidden) HTStore.snapshot('hidden').catch(()=>{});
+    else HTStore.ping().catch(()=>toast('Speicher nicht erreichbar – Änderungen werden evtl. nicht gespeichert!'));
+  });
+  const r = await HTStore.init();
+  if(r.status==='ok' || r.status==='fresh') await boot(r.data); else recovery(r);
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 });
+
+/* ---------- Start, Sicherheit, Wiederherstellung ---------- */
+async function boot(data){
+  S.habits = data.habits; S.weeks = Object.fromEntries(data.weeks.map(w=>[w.key,w])); S.ready = true;
+  render(); HTStore.requestPersist();
+  if(data.habits.length) HTStore.snapshot('start').catch(()=>{});
+}
+async function restoreFrom(id){
+  try { await HTStore.restore(id); await boot(await HTStore.loadAll()); setView('settings'); toast('Backup wiederhergestellt.'); }
+  catch(e){ toast('Wiederherstellung fehlgeschlagen: '+e.message); }
+}
+const fmtAt = iso => new Date(iso).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+function recovery(r){
+  S.ready = false; S.rec = r;
+  const msgs = { error:'Die lokale Datenbank konnte nicht geöffnet werden. Deine Daten wurden nicht verändert.', corrupt:'Einige gespeicherte Daten sind unvollständig. Es wurde nichts verändert oder gelöscht.', 'empty-but-expected':'Die Datenbank ist leer, obwohl hier früher Daten gespeichert waren (z. B. weil iOS Website-Daten bereinigt hat).' };
+  const bk = (r.backups||[]).slice(0,5).map(b=>`<button class="btn ghost full" data-act="restore" data-id="${esc(b.id)}">Backup vom ${fmtAt(b.at)} (${b.counts.habits} Habits, ${b.counts.weeks} Wochen)</button>`).join('');
+  const l = r.ls ? `<button class="btn ghost full" data-act="restore" data-id="ls">Browser-Kopie vom ${fmtAt(r.ls.at)}</button>` : '';
+  $('#view').innerHTML = `<div class="card empty"><h2>${r.status==='empty-but-expected'?'Keine Daten gefunden':'Daten nicht geladen'}</h2>
+    <p class="hint">${msgs[r.status]}${r.error?`<br>(${esc(r.error.name||'Fehler')})`:''}</p>
+    <button class="btn full" data-act="reload">Erneut versuchen</button>${bk}${l}
+    ${r.status==='corrupt'?'<button class="btn ghost full" data-act="open">Trotzdem öffnen (nur Anzeige reparieren)</button>':''}
+    ${r.status==='empty-but-expected'?'<button class="btn ghost full" data-act="fresh">Leer starten oder Datei importieren</button>':''}</div>`;
+}
+async function recoveryClick(e){
+  const b = e.target.closest('[data-act]'); if(!b) return; const a = b.dataset.act;
+  if(a==='reload') location.reload();
+  else if(a==='restore'){ if(confirm('Dieses Backup wiederherstellen?')) restoreFrom(b.dataset.id); }
+  else if(a==='open') boot(S.rec.data);
+  else if(a==='fresh' && confirm('Ohne Daten starten? Backups bleiben erhalten und können später in den Einstellungen wiederhergestellt werden.')) boot({habits:[],weeks:[]});
+}
+async function fillSecurity(){
+  const el = $('#sec'); if(!el) return;
+  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  let bk = []; try { bk = await HTStore.listBackups(); } catch(e){}
+  let pers = null; try { pers = await navigator.storage.persisted(); } catch(e){}
+  const le = Number(localStorage.getItem('ht-last-export')||0), days = le ? Math.floor((Date.now()-le)/864e5) : null;
+  if(!$('#sec')) return;
+  el.innerHTML = `${standalone ? '' : '<p class="warn">Du nutzt die App im Safari-Tab. iOS löscht dort Daten nach ca. 7 Tagen ohne Nutzung, und die installierte App hat einen getrennten Speicher. Bitte über „Zum Home-Bildschirm“ installieren und Daten per Export/Import übernehmen.</p>'}
+    <p>Letzter Datei-Export: ${le ? `vor ${days} Tag(en)` : 'noch nie'}${(!le||days>=7) ? ' – bitte jetzt exportieren (Datei in „Dateien“/iCloud speichern).' : ''}</p>
+    <p>Dauerhafter Speicher: ${pers===true ? 'zugesagt' : 'nicht garantiert'}</p>
+    <ul class="list">${bk.filter(b=>b.id!=='latest').slice(0,8).map(b=>`<li><span class="nm">${fmtAt(b.at)} · ${b.counts.habits} Habits, ${b.counts.weeks} Wochen</span><button class="ib" data-restore="${esc(b.id)}" aria-label="Wiederherstellen">↺</button></li>`).join('') || '<li><span class="nm">Noch keine Backups</span></li>'}</ul>
+    <button class="btn ghost full" data-snap>Backup jetzt erstellen</button>`;
+}

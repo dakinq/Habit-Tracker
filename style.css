@@ -66,3 +66,6 @@ section.card{margin-top:12px}section.card h2{font-size:19px;margin-bottom:8px}
 .divider-img{display:block;width:78%;max-width:300px;margin:10px auto;height:auto}
 .bouquet{width:70%;max-width:240px;height:auto}
 .mini{height:22px;width:auto;vertical-align:-5px}
+
+.warn{color:#a4524a;font-weight:600;margin:0 0 8px}
+#sec p{margin:6px 0}

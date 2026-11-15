@@ -25,3 +25,10 @@ Persönlicher Habit Tracker als Progressive Web App. Kein Konto, kein Backend, a
 - `weeks`: `{key:"2026-W46", year, week, habitIds, marks:{habitId:[7× neutral|completed|missed]}}`
 
 Gelöschte Habits werden archiviert: Sie bleiben in Wochen vor dem Löschen sichtbar, neue Habits erscheinen nicht in älteren Wochen.
+
+## Datensicherheit
+- Alle Daten in IndexedDB (`storage.js`). Nichts wird automatisch gelöscht oder durch leere Daten ersetzt; bei Fehlern erscheint ein Wiederherstellungs-Bildschirm.
+- Automatische Backups (nach Änderungen, beim Start, beim Schließen): `latest`, je ein Stand pro Tag (14 Tage) und eine Kopie im localStorage. Wiederherstellen unter *Einstellungen → Sicherheit & Backups*.
+- **Wichtig:** Backups liegen im selben Browser-Speicher. Löscht iOS diesen, sind sie ebenfalls weg. Schutz davor bietet nur der **Datei-Export** – bitte wöchentlich exportieren und die Datei in „Dateien“/iCloud ablegen.
+- iOS-Hinweis: Safari-Tab und installierte App haben getrennte Speicher; im Safari-Tab löscht iOS Daten nach ca. 7 Tagen ohne Nutzung. Daher nur die installierte App verwenden.
+- Tests: `npm install && npm test`. Bei jedem Update die Version in `sw.js` (`V`) hochzählen.
