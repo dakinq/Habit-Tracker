@@ -1,6 +1,6 @@
-const V = 'habit-tracker-v3';
+const V = 'habit-tracker-v4';
 const FILES = ['./','index.html','style.css','storage.js','app.js','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png'];
-const ASSETS = ["assets/bouquet.png", "assets/bow-small.png", "assets/bow.png", "assets/divider-bow.png", "assets/divider-heart.png", "assets/divider-leaves.png", "assets/flower-gypsophila.png", "assets/flower-peony.png", "assets/flower-pink.png", "assets/flower-small.png", "assets/flower-white.png", "assets/heart-line.png", "assets/heart.png", "assets/leaf.png", "assets/pattern-hearts.png", "assets/sparkle.png", "assets/title-habit-tracker.png"];
+const ASSETS = ["assets/backgrounds/pattern-botanical.jpg", "assets/botanical/gypsophila.png", "assets/botanical/leaf-a.png", "assets/botanical/leaf-b.png", "assets/botanical/sprig-leaves.png", "assets/botanical/sprig-tall.png", "assets/icons/book.png", "assets/icons/cup.png", "assets/icons/flower.png", "assets/icons/heart.png", "assets/icons/meditation.png", "assets/icons/moon.png", "assets/icons/sport.png", "assets/icons/water.png", "assets/logo/logo-habit-tracker.png", "assets/ui-elements/divider-dots.png"];
 self.addEventListener('install',e=>{ e.waitUntil(caches.open(V).then(c=>c.addAll([...FILES,...ASSETS]))); self.skipWaiting(); });
 self.addEventListener('activate',e=>{ e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==V).map(x=>caches.delete(x)))).then(()=>self.clients.claim())); });
 /* Code (HTML/JS/CSS) immer netzwerk-zuerst, damit nie alte und neue Dateien gemischt laufen; Bilder cache-zuerst.

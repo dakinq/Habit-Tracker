@@ -18,7 +18,10 @@ const ICONS = {
   sleep: '<path d="M5 6h5l-5 6h5M13 12h6l-6 7h6"/>',
   move: '<path d="M3 18l5-7 4 4 5-9 4 5"/>'
 };
-const ico = (n,s=22) => ICONS[n] ? `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>` : '';
+const PNG_ICONS = ['flower','sport','book','water','meditation','moon','cup','heart'];
+const ICON_NAMES = [...PNG_ICONS,'sun','food','beauty','sleep','move'];
+const ico = (n,s=22) => PNG_ICONS.includes(n) ? `<span class="pico" style="width:${s}px;height:${s}px;--m:url(assets/icons/${n}.png)"></span>`
+  : ICONS[n] ? `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>` : '';
 const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $ = (s,e=document) => e.querySelector(s);
 
@@ -62,16 +65,16 @@ function home(){
     return `<div class="row"><div class="hn">${ico(h.icon,18)}<span>${esc(h.name)}</span></div>${
       DAYS.map((d,i)=>`<button class="cell" data-h="${h.id}" data-i="${i}" data-s="${m[i]||'neutral'}" ${future?'disabled':''} aria-label="${esc(h.name)}, ${d}"></button>`).join('')}</div>`; }).join('');
   $('#view').innerHTML = `
-  <h1 class="banner-h"><img class="banner" src="assets/title-habit-tracker.png" alt="Habit Tracker"></h1>
+  <h1 class="banner-h"><img class="logo" src="assets/logo/logo-habit-tracker.png" alt="Habit Tracker"></h1>
   <p class="quote">${q}</p>
   <div class="weeknav"><button class="arrow" data-nav="-1" aria-label="Vorherige Woche">‹</button>
     <div class="mid"><b>KW ${iso.week}</b><span>${fmtRange(S.mon,sun)}</span></div>
     <button class="arrow" data-nav="1" aria-label="Nächste Woche">›</button></div>
   ${isCur ? '' : '<button class="pill" data-today>Zur aktuellen Woche</button>'}
   ${future ? '<p class="note">Zukünftige Woche – Markieren ist noch nicht möglich.</p>' : ''}
-  <img class="divider-img" src="assets/divider-heart.png" alt="">
+  <img class="divider-img" src="assets/ui-elements/divider-dots.png" alt="">
   <div class="card">${habits.length ? `<div class="row head"><div></div>${head}</div>${rows}` :
-    `<div class="empty"><img class="bouquet" src="assets/bouquet.png" alt=""><br>Noch keine Habits in dieser Woche.<br><button class="btn" style="margin-top:12px" data-go="settings">Habit anlegen</button></div>`}</div>`;
+    `<div class="empty"><img class="sprig-empty" src="assets/botanical/sprig-tall.png" alt=""><br>Noch keine Habits in dieser Woche.<br><button class="btn" style="margin-top:12px" data-go="settings">Habit anlegen</button></div>`}</div>`;
 }
 function homeClick(e){
   const c = e.target.closest('[data-nav],[data-today],.cell,[data-go]'); if(!c) return;
@@ -88,7 +91,7 @@ function homeClick(e){
 function settings(){
   const list = activeHabits(), archived = S.habits.length - list.length;
   $('#view').innerHTML = `
-  <div class="hero"><img src="assets/flower-pink.png" alt=""><h1 class="title">Einstellungen</h1><img src="assets/flower-gypsophila.png" alt=""></div>
+  <div class="hero"><img src="assets/botanical/sprig-leaves.png" alt=""><h1 class="title">Einstellungen</h1><img class="mirror" src="assets/botanical/sprig-leaves.png" alt=""></div>
   <section class="card"><h2>Meine Habits verwalten</h2>
     ${list.length ? `<ul class="list" id="hl">${list.map(h=>`<li data-id="${h.id}"><span class="handle" aria-label="Verschieben">☰</span>
       <span style="width:22px">${ico(h.icon)}</span><span class="nm">${esc(h.name)}</span>
@@ -98,12 +101,12 @@ function settings(){
     <button class="btn full" data-add>Habit hinzufügen</button>
     ${archived ? `<p class="hint">${archived} gelöschte(s) Habit(s) bleiben in vergangenen Wochen sichtbar.</p>` : ''}
   </section>
-  <img class="divider-img" src="assets/divider-bow.png" alt=""><section class="card"><h2>Datensicherung</h2>
+  <img class="divider-img" src="assets/ui-elements/divider-dots.png" alt=""><section class="card"><h2>Datensicherung</h2>
     <p class="hint" style="margin:0 0 8px">Deine Daten liegen nur auf diesem Gerät. Sichere sie regelmäßig.</p>
     <div class="btns"><button class="btn ghost" data-export>Exportieren</button><button class="btn ghost" data-import>Importieren</button></div>
     <input type="file" id="file" accept="application/json,.json" hidden></section>
   <section class="card"><h2>Sicherheit & Backups</h2><div id="sec" class="hint">Lade …</div></section>
-  <section class="card"><h2><img class="mini" src="assets/bow-small.png" alt=""> App-Informationen</h2>
+  <section class="card"><h2>App-Informationen</h2>
     <p class="hint" style="margin:0">Habit Tracker 1.0 · Funktioniert offline · Keine Cloud, kein Konto.<br>${S.habits.length} Habits, ${Object.keys(S.weeks).length} gespeicherte Wochen.</p></section>`;
   const l = $('#hl'); if(l) dragSort(l);
   fillSecurity();
@@ -141,7 +144,7 @@ function openEditor(h){
   o.innerHTML = `<div class="sheet"><h2>${h?'Habit bearbeiten':'Neues Habit'}</h2>
     <input id="nm" maxlength="40" placeholder="Name des Habits" autocomplete="off">
     <p class="lbl">Symbol (optional)</p>
-    <div class="icons"><button class="ic" data-i="">Kein</button>${Object.keys(ICONS).map(n=>`<button class="ic" data-i="${n}">${ico(n,26)}</button>`).join('')}</div>
+    <div class="icons"><button class="ic" data-i="">Kein</button>${ICON_NAMES.map(n=>`<button class="ic" data-i="${n}">${ico(n,26)}</button>`).join('')}</div>
     <div class="btns"><button class="btn ghost" data-x>Abbrechen</button><button class="btn" data-ok>Speichern</button></div></div>`;
   document.body.appendChild(o);
   const nm = $('#nm',o); nm.value = h ? h.name : '';
