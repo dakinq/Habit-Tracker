@@ -1,3 +1,4 @@
+(function(g){
 'use strict';
 /* Speicherschicht: IndexedDB (primär) + Backups (IndexedDB + localStorage-Spiegel) + Integritätsprüfung.
    Grundregel: Nichts wird automatisch gelöscht oder durch leere/Standarddaten ersetzt. */
@@ -38,12 +39,13 @@ function createStore(){ return {
   DB_VERSION, db:null, lastError:null, _fail:null,
   _open(){ return new Promise((res,rej)=>{
     const r = indexedDB.open(DB_NAME,DB_VERSION);
+    const to = setTimeout(()=>rej(Object.assign(new Error('Datenbank antwortet nicht (evtl. ist die App noch an anderer Stelle offen)'),{name:'TimeoutError'})),8000);
     r.onupgradeneeded = () => { const d = r.result;   // nur additiv: vorhandene Stores/Daten werden nie angefasst
       for(const [n,k] of [['habits','id'],['weeks','key'],['backups','id'],['meta','key']]) if(!d.objectStoreNames.contains(n)) d.createObjectStore(n,{keyPath:k}); };
-    r.onsuccess = () => { const d = r.result; d.onclose = () => { this.db = null; }; d.onversionchange = () => { d.close(); this.db = null; }; res(d); };
-    r.onerror = () => rej(r.error);
+    r.onsuccess = () => { clearTimeout(to); const d = r.result; d.onclose = () => { this.db = null; }; d.onversionchange = () => { d.close(); this.db = null; }; res(d); };
+    r.onerror = () => { clearTimeout(to); rej(r.error); };
   }); },
-  async open(){ let err; for(let i=0;i<4;i++){ try { this.db = await this._open(); return this.db; } catch(e){ err = e; if(e && e.name==='VersionError') break; await sleep(250*(i+1)); } } this.lastError = err; throw err; },
+  async open(){ let err; for(let i=0;i<4;i++){ try { this.db = await this._open(); return this.db; } catch(e){ err = e; if(e && (e.name==='VersionError' || e.name==='TimeoutError')) break; await sleep(250*(i+1)); } } this.lastError = err; throw err; },
   async tx(stores,mode,fn){
     for(let a=0;;a++){
       try {
@@ -101,5 +103,6 @@ function createStore(){ return {
   },
   async requestPersist(){ try { return navigator.storage && navigator.storage.persist ? await navigator.storage.persist() : false; } catch(e){ return false; } }
 }; }
-const HTStore = createStore();
+g.HTCore = HTCore; g.HTStore = createStore();
 if(typeof module!=='undefined') module.exports = { HTCore, createStore, validate };
+})(typeof globalThis!=='undefined' ? globalThis : window);

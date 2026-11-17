@@ -1,4 +1,4 @@
-const V = 'habit-tracker-v4';
+const V = 'habit-tracker-v5';
 const FILES = ['./','index.html','style.css','storage.js','app.js','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png'];
 const ASSETS = ["assets/backgrounds/pattern-botanical.jpg", "assets/botanical/gypsophila.png", "assets/botanical/leaf-a.png", "assets/botanical/leaf-b.png", "assets/botanical/sprig-leaves.png", "assets/botanical/sprig-tall.png", "assets/icons/book.png", "assets/icons/cup.png", "assets/icons/flower.png", "assets/icons/heart.png", "assets/icons/meditation.png", "assets/icons/moon.png", "assets/icons/sport.png", "assets/icons/water.png", "assets/logo/logo-habit-tracker.png", "assets/ui-elements/divider-dots.png"];
 self.addEventListener('install',e=>{ e.waitUntil(caches.open(V).then(c=>c.addAll([...FILES,...ASSETS]))); self.skipWaiting(); });

@@ -22,6 +22,7 @@
   <button data-view="settings"><svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>Einstellungen</span></button>
 </nav>
 <div id="toast"></div>
+<script>window.addEventListener('error',function(e){var v=document.getElementById('view');if(!v||window.__ok)return;v.textContent='';var p=document.createElement('p');p.className='note';p.textContent='Startfehler: '+(e.message||'unbekannt')+' – Deine Daten sind nicht betroffen. ';var b=document.createElement('button');b.className='btn';b.textContent='Neu laden';b.onclick=function(){location.reload()};v.appendChild(p);v.appendChild(b)});</script>
 <script src="storage.js"></script>
 <script src="app.js"></script>
 </body>

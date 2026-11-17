@@ -200,14 +200,16 @@ document.addEventListener('DOMContentLoaded',async()=>{
     if(document.hidden) HTStore.snapshot('hidden').catch(()=>{});
     else HTStore.ping().catch(()=>toast('Speicher nicht erreichbar – Änderungen werden evtl. nicht gespeichert!'));
   });
-  const r = await HTStore.init();
-  if(r.status==='ok' || r.status==='fresh') await boot(r.data); else recovery(r);
+  const fail = e => recovery({ status:'error', error:e, backups:[], ls:HTStore.lsBackup() });
+  setTimeout(()=>{ if(!S.ready && !S.rec) fail({name:'Zeitüberschreitung'}); },12000);
+  try { const r = await HTStore.init(); if(r.status==='ok' || r.status==='fresh') await boot(r.data); else recovery(r); }
+  catch(e){ fail(e); }
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 });
 
 /* ---------- Start, Sicherheit, Wiederherstellung ---------- */
 async function boot(data){
-  S.habits = data.habits; S.weeks = Object.fromEntries(data.weeks.map(w=>[w.key,w])); S.ready = true;
+  S.habits = data.habits; S.weeks = Object.fromEntries(data.weeks.map(w=>[w.key,w])); S.ready = true; window.__ok = true;
   render(); HTStore.requestPersist();
   if(data.habits.length) HTStore.snapshot('start').catch(()=>{});
 }
